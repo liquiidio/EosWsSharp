@@ -1,4 +1,4 @@
-# EosWs-Sharp
+# EosWsSharp
 C# dfuse.io Websocket-Client
 
 *See https://docs.dfuse.io/#introduction*
