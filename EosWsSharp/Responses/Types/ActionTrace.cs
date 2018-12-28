@@ -69,7 +69,7 @@ namespace EosWsSharp.Responses.Types
     public class RamOps
     {
         [JsonProperty("op")]
-        public string Op { get; internal set; }
+        public string Op { get; internal set; } // TODO ?
 
         [JsonProperty("action_idx")]
         public long ActionIdx { get; internal set; }
@@ -117,10 +117,10 @@ namespace EosWsSharp.Responses.Types
         public AccountRamDelta[] AccountRamDeltas { get; internal set; }
 
         [JsonProperty("except")]
-        public object Except { get; internal set; }
+        public object Except { get; internal set; }     // TODO
 
         [JsonProperty("inline_traces")]
-        public object[] InlineTraces { get; internal set; }
+        public object[] InlineTraces { get; internal set; }     // TODO ?
     }
 
     public class AccountRamDelta
