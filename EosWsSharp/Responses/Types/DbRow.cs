@@ -20,7 +20,7 @@ namespace EosWsSharp.Responses.Types
         [JsonProperty("json")]
         public JObject Json { get; internal set; }
 
-        public dynamic DynamicRowObj => Json != null ? JsonConvert.DeserializeObject<dynamic>(Json.ToString()) : null;
+        public dynamic DynamicJsonObj => Json != null ? JsonConvert.DeserializeObject<dynamic>(Json.ToString()) : null;
 
         [JsonProperty("error")]
         public string Error { get; internal set; }

@@ -5,7 +5,8 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DocumentationFile>C:\Users\madh-\source\repos\EosWsSharp\EosWsSharp\EosWsSharp.xml</DocumentationFile>
+    <DocumentationFile>bin\Release\EosWsSharp.xml</DocumentationFile>
+    <OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>

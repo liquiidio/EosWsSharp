@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 
 namespace EosWsSharp.Responses.Types
 {
@@ -8,23 +11,20 @@ namespace EosWsSharp.Responses.Types
     /// </summary>
     public class TransactionLifecycle : IDfuseResponseData
     {
+        [JsonConverter(typeof(StringEnumConverter))]
         [JsonProperty("transaction_status")]
-        public string TransactionStatus { get; internal set; }
-        // TODO add enum 
-        /*
-         *  pending, delayed, canceled, expired, executed, soft_fail, hard_fail	
-         */
+        public TransactionStatus TransactionStatus { get; internal set; }
 
         [JsonProperty("id")]
         public string Id { get; internal set; }
 
         [JsonProperty("transaction")]
-        public string Transaction { get; internal set; }    
-        // TODO 
+        public JObject Transaction { get; internal set; }    // TODO no docs
+
+        public dynamic DynamicTransactionObj => Transaction != null ? JsonConvert.DeserializeObject<dynamic>(Transaction.ToString()) : null;   // TODO no docs
 
         [JsonProperty("execution_trace")]
-        public string ExecutionTrace { get; internal set; }
-        // TODO https://github.com/dfuse-io/eosws-go/blob/master/mdl/v1/transaction.go#L11 
+        public ActionTrace ExecutionTrace { get; internal set; }
 
         [JsonProperty("execution_block_header")]
         public string ExecutionBlockHeader { get; internal set; }
@@ -66,7 +66,7 @@ namespace EosWsSharp.Responses.Types
         public string Trx { get; internal set; }
     }
 
-    public class ExtDTrxOp  // TODO ExtDTrxop https://github.com/dfuse-io/eosws-go/blob/master/mdl/v1/dtrxop.go#L24
+    public class ExtDTrxOp // TODO ExtDTrxop https://github.com/dfuse-io/eosws-go/blob/master/mdl/v1/dtrxop.go#L24
     {
         [JsonProperty("src_trx_id")]
         public string SourceTransactionId { get; internal set; }
@@ -91,5 +91,17 @@ namespace EosWsSharp.Responses.Types
 
         [JsonProperty("sender")]
         public string Sender { get; internal set; }
+    }
+
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
+    public enum TransactionStatus
+    {
+        pending,
+        delayed,
+        canceled,
+        expired,
+        executed,
+        soft_fail,
+        hard_fail
     }
 }

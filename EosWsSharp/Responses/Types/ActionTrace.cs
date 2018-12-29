@@ -1,5 +1,6 @@
 ﻿using System;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace EosWsSharp.Responses.Types
 {
@@ -64,12 +65,17 @@ namespace EosWsSharp.Responses.Types
 
         [JsonProperty("trx_id")]
         public string TrxId { get; internal set; }
+
+        [JsonProperty("trx")]
+        public JObject Trx { get; internal set; }
+
+        public dynamic DynamicTrxObject => Trx != null ? JsonConvert.DeserializeObject<dynamic>(Trx.ToString()) : null;
     }
 
     public class RamOps
     {
         [JsonProperty("op")]
-        public string Op { get; internal set; } // TODO ?
+        public string Op { get; internal set; }
 
         [JsonProperty("action_idx")]
         public long ActionIdx { get; internal set; }
@@ -117,10 +123,15 @@ namespace EosWsSharp.Responses.Types
         public AccountRamDelta[] AccountRamDeltas { get; internal set; }
 
         [JsonProperty("except")]
-        public object Except { get; internal set; }     // TODO
+        public JObject Except { get; internal set; }
+
+        public dynamic DynamicExceptObj => Except != null ? JsonConvert.DeserializeObject<dynamic>(Except.ToString()) : null;   // TODO no docs
 
         [JsonProperty("inline_traces")]
-        public object[] InlineTraces { get; internal set; }     // TODO ?
+        public JObject[] InlineTraces { get; internal set; }
+
+        public dynamic DynamicInlineTracesObj => InlineTraces != null ? JsonConvert.DeserializeObject<dynamic>(InlineTraces.ToString()) : null;   // TODO no docs
+
     }
 
     public class AccountRamDelta

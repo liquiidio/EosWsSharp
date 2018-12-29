@@ -79,7 +79,8 @@ namespace EosWsSharp.Responses.Converters
 
         public override DfuseWebSocketResponse<IDfuseResponseData> Create(System.Type objectType)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
+            return null;
         }
     }
 }
