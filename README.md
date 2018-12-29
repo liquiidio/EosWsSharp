@@ -60,7 +60,7 @@ await client.ConnectAsync(CancellationToken.None);
 
 * ###### TableRowsReceived
 	```csharp
-	client.TableDeltaReceived += (sender, args) =>
+	client.TableRowsReceived += (sender, args) =>
 	{
 		TableRows tableRows = args.response.Data;
 		Console.WriteLine(tableRows.Account);
