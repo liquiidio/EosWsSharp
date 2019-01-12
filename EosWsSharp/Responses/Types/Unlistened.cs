@@ -3,11 +3,10 @@
 namespace EosWsSharp.Responses.Types
 {
     /// <summary>
-    /// See https://docs.dfuse.io/#websocket-based-api-unlisten
+    ///     See https://docs.dfuse.io/#websocket-based-api-unlisten
     /// </summary>
     public class Unlistened : IDfuseResponseData
     {
-        [JsonProperty("success")]
-        public bool Success { get; internal set; }
+        [JsonProperty("success")] public bool Success { get; internal set; }
     }
 }

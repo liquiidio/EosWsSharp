@@ -3,7 +3,7 @@
 namespace EosWsSharp.Requests.Options
 {
     /// <summary>
-    /// See https://docs.dfuse.io/#websocket-based-api-unlisten
+    ///     See https://docs.dfuse.io/#websocket-based-api-unlisten
     /// </summary>
     public class UnlistenOptions : IDfuseRequestData
     {

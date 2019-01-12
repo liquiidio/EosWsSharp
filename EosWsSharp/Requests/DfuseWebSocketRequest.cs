@@ -7,7 +7,7 @@ using Newtonsoft.Json.Converters;
 namespace EosWsSharp.Requests
 {
     /// <summary>
-    /// Generic DfuseWebsocketRequest see https://docs.dfuse.io/#introduction for more
+    ///     Generic DfuseWebsocketRequest see https://docs.dfuse.io/#introduction for more
     /// </summary>
     /// <typeparam name="T">
     /// </typeparam>
@@ -66,6 +66,6 @@ namespace EosWsSharp.Requests
     }
 
     public interface IDfuseRequestData
-    {    }
-
+    {
+    }
 }

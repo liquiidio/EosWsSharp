@@ -3,7 +3,7 @@
 namespace EosWsSharp.Requests.Options
 {
     /// <summary>
-    /// See https://docs.dfuse.io/#websocket-based-api-get_action_traces
+    ///     See https://docs.dfuse.io/#websocket-based-api-get_action_traces
     /// </summary>
     public class GetActionTracesOptions : IDfuseRequestData
     {

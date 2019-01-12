@@ -3,7 +3,7 @@
 namespace EosWsSharp.Requests.Options
 {
     /// <summary>
-    /// See https://docs.dfuse.io/#websocket-based-api-get_transaction_lifecycle
+    ///     See https://docs.dfuse.io/#websocket-based-api-get_transaction_lifecycle
     /// </summary>
     public class GetTransactionLifecycleOptions : IDfuseRequestData
     {

@@ -3,7 +3,7 @@
 namespace EosWsSharp.Requests.Options
 {
     /// <summary>
-    /// See https://docs.dfuse.io/#websocket-based-api-get_table_rows
+    ///     See https://docs.dfuse.io/#websocket-based-api-get_table_rows
     /// </summary>
     public class GetTableRowOptions : IDfuseRequestData
     {

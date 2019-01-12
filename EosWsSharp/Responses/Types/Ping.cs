@@ -3,20 +3,25 @@
 namespace EosWsSharp.Responses.Types
 {
     /// <summary>
-    /// See https://docs.dfuse.io/#websocket-based-api-ping
+    ///     See https://docs.dfuse.io/#websocket-based-api-ping
     /// </summary>
     public class Ping : IDfuseResponseData
     {
-        private DateTimeOffset _pingData;
+        public DateTimeOffset PingData;
 
         public Ping(DateTimeOffset pingData)
         {
-            _pingData = pingData;
+            PingData = pingData;
         }
 
         public static implicit operator Ping(string pingData)
         {
             return new Ping(DateTimeOffset.Parse(pingData));
+        }
+
+        public static implicit operator Ping(DateTime pingDateTime)
+        {
+            return new Ping(pingDateTime);
         }
     }
 }

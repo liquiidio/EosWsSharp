@@ -1,14 +1,12 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
 using EosWsSharp.Responses.Types;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace EosWsSharp.Responses
 {
-    using System.Diagnostics.CodeAnalysis;
-
     /// <summary>
-    /// Generic DfuseWebsocketResponse see https://docs.dfuse.io/#introduction for more
+    ///     Generic DfuseWebsocketResponse see https://docs.dfuse.io/#introduction for more
     /// </summary>
     /// <typeparam name="T">
     /// </typeparam>
@@ -16,10 +14,11 @@ namespace EosWsSharp.Responses
     {
         [JsonConverter(typeof(StringEnumConverter))]
         [JsonProperty("type")]
-        public ResponseType Type {
+        public ResponseType Type
+        {
             get
             {
-                if(Data is ActionTrace)
+                if (Data is ActionTrace)
                     return ResponseType.action_trace;
                 if (Data is HeadInfo)
                     return ResponseType.head_info;
@@ -39,15 +38,13 @@ namespace EosWsSharp.Responses
             }
         }
 
-        [JsonProperty("req_id")]
-        public string ReqId { get;}
+        [JsonProperty("req_id")] public string ReqId { get; internal set; }
 
-        [JsonProperty("data")]
-        public T Data { get; internal set; }
+        [JsonProperty("data")] public T Data { get; internal set; }
     }
 
     /// <summary>
-    /// ResponseType-enumeration.
+    ///     ResponseType-enumeration.
     /// </summary>
     [SuppressMessage("ReSharper", "InconsistentNaming")]
     public enum ResponseType
@@ -64,6 +61,6 @@ namespace EosWsSharp.Responses
     }
 
     public interface IDfuseResponseData
-    {    }
-
+    {
+    }
 }

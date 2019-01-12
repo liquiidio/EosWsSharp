@@ -8,14 +8,13 @@ namespace EosWsSharp
 
     public class Account : IEosName
     {
+        private static readonly Regex AccountRegex = new Regex(@"([0-4,a-z,.]*)");
         private readonly string _account;
 
         public Account(string account)
         {
             _account = account;
         }
-
-        private static readonly Regex AccountRegex = new Regex(@"([0-4,a-z,.]*)");
 
         public static implicit operator Account(string account)
         {
@@ -27,19 +26,21 @@ namespace EosWsSharp
             return new Account(account);
         }
 
-        public override string ToString() => _account;
+        public override string ToString()
+        {
+            return _account;
+        }
     }
 
     public class Scope : IEosName
     {
+        private static readonly Regex ScopeRegex = new Regex(@"([0-4,a-z,]*)");
         private readonly string _scope;
 
         public Scope(string scope)
         {
             _scope = scope;
         }
-
-        private static readonly Regex ScopeRegex = new Regex(@"([0-4,a-z,]*)");
 
         public static implicit operator Scope(string scope)
         {
@@ -51,19 +52,21 @@ namespace EosWsSharp
             return new Scope(scope);
         }
 
-        public override string ToString() => _scope;
+        public override string ToString()
+        {
+            return _scope;
+        }
     }
 
     public class Code : IEosName
     {
+        private static readonly Regex CodeRegex = new Regex(@"([0-4,a-z,]*)");
         private readonly string _code;
 
         public Code(string code)
         {
             _code = code;
         }
-
-        private static readonly Regex CodeRegex = new Regex(@"([0-4,a-z,]*)");
 
         public static implicit operator Code(string code)
         {
@@ -75,8 +78,10 @@ namespace EosWsSharp
             return new Code(code);
         }
 
-        public override string ToString() => _code;
-
+        public override string ToString()
+        {
+            return _code;
+        }
     }
 
     public class EosNameConverter<T> : JsonConverter where T : IEosName
@@ -99,5 +104,6 @@ namespace EosWsSharp
     }
 
     public interface IEosName
-    {    }
+    {
+    }
 }

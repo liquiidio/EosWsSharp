@@ -1,257 +1,316 @@
 ﻿using System;
-using System.Threading.Tasks;
 using System.Net.WebSockets;
-using System.Threading;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using EosWsSharp.Requests;
 using EosWsSharp.Requests.Options;
+using EosWsSharp.Responses;
 using EosWsSharp.Responses.Converters;
 using EosWsSharp.Responses.Types;
 using Newtonsoft.Json;
-using EosWsSharp.Responses;
 
 namespace EosWsSharp
 {
     public class DfuseClient
     {
         /// <summary>
-        /// The websocket-uri the clientWebSocket connects to.
+        ///     The bearer-token passed for authentication.
         /// </summary>
-        private readonly Uri wsUri;
+        private readonly string _bearer;
 
         /// <summary>
-        /// The bearer-token passed for authentication.
+        ///     The origin passed to the header.
         /// </summary>
-        private readonly string bearer;
+        private readonly string _origin;
 
         /// <summary>
-        /// The origin passed to the header.
+        ///     The websocket-uri the clientWebSocket connects to.
         /// </summary>
-        private readonly string origin;
+        private readonly Uri _wsUri;
 
         /// <summary>
-        /// The clientWebSocket.
+        ///     The clientWebSocket.
         /// </summary>
-        private ClientWebSocket clientWebSocket;
+        private readonly ClientWebSocket _clientWebSocket;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="DfuseClient"/> class.
+        ///     Initializes a new instance of the <see cref="DfuseClient" /> class.
         /// </summary>
         /// <param name="eosNetwork">
-        /// The eos network.
+        ///     The eos network.
         /// </param>
         /// <param name="bearer">
-        /// The bearer-token passed as authorization.
+        ///     The bearer-token passed as authorization.
         /// </param>
         /// <param name="origin">
-        /// The origin passed to the header.
+        ///     The origin passed to the header.
         /// </param>
         public DfuseClient(Network eosNetwork, string bearer, string origin)
         {
-            this.bearer = bearer;
-            this.origin = origin;
-            this.wsUri = new Uri($"wss://{eosNetwork.ToString().ToLowerInvariant()}.eos.dfuse.io/v1/stream");
+            _bearer = bearer;
+            _origin = origin;
+            _wsUri = new Uri($"wss://{eosNetwork.ToString().ToLowerInvariant()}.eos.dfuse.io/v1/stream");
 
-            clientWebSocket = new ClientWebSocket();
-            clientWebSocket.Options.SetRequestHeader(headerName: "Origin", headerValue: origin);
-            clientWebSocket.Options.SetRequestHeader(headerName: "Authorization", headerValue: "Bearer " + bearer);
+            _clientWebSocket = new ClientWebSocket();
+            _clientWebSocket.Options.SetRequestHeader("Origin", origin);
+            _clientWebSocket.Options.SetRequestHeader("Authorization", "Bearer " + bearer);
         }
 
         /// <summary>
-        /// Connects to the Dfuse-Service.
+        ///     The WebSocketState of the underlying ClientWebSocket.
+        /// </summary>
+        public WebSocketState ConnectionState => _clientWebSocket.State;
+
+        /// <summary>
+        ///     Connects to the Dfuse-Service.
         /// </summary>
         /// <param name="ctl">
-        /// The CancellationToken ctl.
+        ///     The CancellationToken ctl.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
         public async Task ConnectAsync(CancellationToken ctl)
         {
-                await clientWebSocket.ConnectAsync(wsUri, ctl);
-                Receive(ctl);
+            await _clientWebSocket.ConnectAsync(_wsUri, ctl);
+            Receive(ctl);
         }
 
         /// <summary>
-        /// Waits and receives messages via Websocket.
+        ///     Waits and receives messages via Websocket.
         /// </summary>
         /// <param name="ctl">
-        /// The CancellationToken ctl.
+        ///     The CancellationToken ctl.
         /// </param>
-        async void Receive(CancellationToken ctl)
+        private async void Receive(CancellationToken ctl)
         {
-            while (clientWebSocket.State == WebSocketState.Open)
-            {
-                ArraySegment<byte> receivedBytes = new ArraySegment<byte>(new byte[32768]);
-
-                WebSocketReceiveResult result = await clientWebSocket.ReceiveAsync(receivedBytes, ctl);
-                while (!result.EndOfMessage)
+            while (_clientWebSocket.State == WebSocketState.Open)
+                try
                 {
-                    result = await clientWebSocket.ReceiveAsync(receivedBytes, ctl);
+                    var receivedBytes = new ArraySegment<byte>(new byte[131072]);
+
+                    var result = await _clientWebSocket.ReceiveAsync(receivedBytes, ctl);
+                    var response = Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
+
+                    while (!result.EndOfMessage)
+                    {
+                        result = await _clientWebSocket.ReceiveAsync(receivedBytes, ctl);
+                        response += Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
+                    }
+
+                    HandleResponse(response);
                 }
-                HandleResponse(Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count));
-            }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
+
+            OnConnectionLost(new DfuseWebSocketClosedEventArgs {State = _clientWebSocket.State});
         }
 
         /// <summary>
-        /// Handles the dfuse-responses.
+        ///     Handles the dfuse-responses.
         /// </summary>
         /// <param name="jsonResponse">
-        /// The json-response.
+        ///     The json-response.
         /// </param>
         /// <exception cref="Exception">
         /// </exception>
         private void HandleResponse(string jsonResponse)
         {
-            dynamic dfuseResponseDynamic = JsonConvert.DeserializeObject<dynamic>(jsonResponse);
-            if(dfuseResponseDynamic == null)
-                return;
-            
-            switch (dfuseResponseDynamic.type.ToString())
+            try
             {
-                case "action_trace":
-                    DfuseWebSocketResponse<ActionTrace> actionTraceResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<ActionTrace>>(jsonResponse, new DfuseResponseConverter());
-                    OnActionTracesReceived(new DfuseMessageReceivedEventArgs<ActionTrace>(){response = actionTraceResponse});
-                    break;
-                case "table_snapshot":
-                    DfuseWebSocketResponse<TableRows> tableRowsResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<TableRows>>(jsonResponse, new DfuseResponseConverter());
-                    OnTableRowsReceived(new DfuseMessageReceivedEventArgs<TableRows>(){response = tableRowsResponse});
-                    break;
-                case "table_delta":
-                    DfuseWebSocketResponse<TableDelta> tableDeltaResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<TableDelta>>(jsonResponse, new DfuseResponseConverter());
-                    OnTableDeltaReceived(new DfuseMessageReceivedEventArgs<TableDelta>(){response = tableDeltaResponse});
-                    break;
-                case "transaction_lifecycle":
-                    DfuseWebSocketResponse<TransactionLifecycle> transactionLifecycleResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<TransactionLifecycle>>(jsonResponse, new DfuseResponseConverter());
-                    OnTransactionLifecycleReceived(new DfuseMessageReceivedEventArgs<TransactionLifecycle>(){response = transactionLifecycleResponse});
-                    break;
-                case "head_info":
-                    DfuseWebSocketResponse<HeadInfo> headInfoResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<HeadInfo>>(jsonResponse, new DfuseResponseConverter());
-                    OnHeadInfoReceived(new DfuseMessageReceivedEventArgs<HeadInfo>() { response = headInfoResponse });
-                    break;
-                case "progress":
-                    DfuseWebSocketResponse<Progress> progressResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<Progress>>(jsonResponse, new DfuseResponseConverter());
-                    OnProgressReceived(new DfuseMessageReceivedEventArgs<Progress>() { response = progressResponse });
-                    break;
-                case "error":
-                    DfuseWebSocketResponse<Error> errorResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<Error>>(jsonResponse, new DfuseResponseConverter());
-                    OnErrorReceived(new DfuseMessageReceivedEventArgs<Error>() { response = errorResponse });
-                    break;
-                case "ping":
-                    DfuseWebSocketResponse<Ping> pingResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<Ping>>(jsonResponse, new DfuseResponseConverter());
-                    OnPingReceived(new DfuseMessageReceivedEventArgs<Ping>() { response = pingResponse });
-                    break;
-                case "listening":
-                    DfuseWebSocketResponse<Listening> listeningResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<Listening>>(jsonResponse, new DfuseResponseConverter());
-                    OnListening(new DfuseMessageReceivedEventArgs<Listening>() { response = listeningResponse });
-                    break;
-                case "unlistened":
-                    DfuseWebSocketResponse<Unlistened> unlistenedResponse = JsonConvert.DeserializeObject<DfuseWebSocketResponse<Unlistened>>(jsonResponse, new DfuseResponseConverter());
-                    OnUnlistened(new DfuseMessageReceivedEventArgs<Unlistened>() { response = unlistenedResponse });
-                    break;
-                default:
-                    throw new Exception($"unknown type {dfuseResponseDynamic.type.ToString()}");
+                var dfuseResponseDynamic = JsonConvert.DeserializeObject<dynamic>(jsonResponse);
+                if (dfuseResponseDynamic == null)
+                    return;
+
+                switch (dfuseResponseDynamic.type.ToString())
+                {
+                    case "action_trace":
+                        var actionTraceResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<ActionTrace>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnActionTracesReceived(new DfuseMessageReceivedEventArgs<ActionTrace>
+                            {Response = actionTraceResponse});
+                        break;
+                    case "table_snapshot":
+                        var tableRowsResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<TableRows>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnTableRowsReceived(new DfuseMessageReceivedEventArgs<TableRows>
+                            {Response = tableRowsResponse});
+                        break;
+                    case "table_delta":
+                        var tableDeltaResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<TableDelta>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnTableDeltaReceived(new DfuseMessageReceivedEventArgs<TableDelta>
+                            {Response = tableDeltaResponse});
+                        break;
+                    case "transaction_lifecycle":
+                        var transactionLifecycleResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<TransactionLifecycle>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnTransactionLifecycleReceived(new DfuseMessageReceivedEventArgs<TransactionLifecycle>
+                            {Response = transactionLifecycleResponse});
+                        break;
+                    case "head_info":
+                        var headInfoResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<HeadInfo>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnHeadInfoReceived(new DfuseMessageReceivedEventArgs<HeadInfo> {Response = headInfoResponse});
+                        break;
+                    case "progress":
+                        var progressResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<Progress>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnProgressReceived(new DfuseMessageReceivedEventArgs<Progress> {Response = progressResponse});
+                        break;
+                    case "error":
+                        var errorResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<Error>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnErrorReceived(new DfuseMessageReceivedEventArgs<Error> {Response = errorResponse});
+                        break;
+                    case "ping":
+                        var pingResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<Ping>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnPingReceived(new DfuseMessageReceivedEventArgs<Ping> {Response = pingResponse});
+                        break;
+                    case "listening":
+                        var listeningResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<Listening>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnListening(new DfuseMessageReceivedEventArgs<Listening> {Response = listeningResponse});
+                        break;
+                    case "unlistened":
+                        var unlistenedResponse =
+                            JsonConvert.DeserializeObject<DfuseWebSocketResponse<Unlistened>>(jsonResponse,
+                                new DfuseResponseConverter());
+                        OnUnlistened(new DfuseMessageReceivedEventArgs<Unlistened> {Response = unlistenedResponse});
+                        break;
+                    default:
+                        throw new Exception($"unknown type {dfuseResponseDynamic.type.ToString()}");
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
             }
         }
 
         /// <summary>
-        /// Closes websocket-connection async.
+        ///     Closes websocket-connection async.
         /// </summary>
         /// <param name="statusDescription">
-        /// A status description for closing the connection.
+        ///     A status description for closing the connection.
         /// </param>
         /// <param name="ctl">
-        /// The CancellationToken ctl.
+        ///     The CancellationToken ctl.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
         public async Task CloseAsync(string statusDescription, CancellationToken ctl)
         {
-            await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", ctl);
+            await _clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", ctl);
         }
 
         /// <summary>
-        /// method for sending a get_action_trace-request.
+        ///     method for sending a get_action_trace-request.
         /// </summary>
         /// <param name="getActionTraceOpts">
-        /// Options for sending a get_action_trace-request.
+        ///     Options for sending a get_action_trace-request.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
         public async Task GetActionTraces(DfuseWebSocketRequest<GetActionTracesOptions> getActionTraceOpts)
         {
-            string getActionTraceOptsJson = JsonConvert.SerializeObject(getActionTraceOpts);
-            await clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.ASCII.GetBytes(getActionTraceOptsJson,0,getActionTraceOptsJson.Length)),WebSocketMessageType.Text,true,CancellationToken.None);
+            var getActionTraceOptsJson = JsonConvert.SerializeObject(getActionTraceOpts);
+            await _clientWebSocket.SendAsync(
+                new ArraySegment<byte>(
+                    Encoding.ASCII.GetBytes(getActionTraceOptsJson, 0, getActionTraceOptsJson.Length)),
+                WebSocketMessageType.Text, true, CancellationToken.None);
         }
 
 
         /// <summary>
-        /// method for sending a get_table_row-request.
+        ///     method for sending a get_table_row-request.
         /// </summary>
         /// <param name="getTableRowOpts">
-        /// Options for sending a get_table_row-request.
+        ///     Options for sending a get_table_row-request.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
         public async Task GetTableRows(DfuseWebSocketRequest<GetTableRowOptions> getTableRowOpts)
         {
-            string getTableRowOptsJson = JsonConvert.SerializeObject(getTableRowOpts);
-            await clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.ASCII.GetBytes(getTableRowOptsJson, 0, getTableRowOptsJson.Length)), WebSocketMessageType.Text, true, CancellationToken.None);
+            var getTableRowOptsJson = JsonConvert.SerializeObject(getTableRowOpts);
+            await _clientWebSocket.SendAsync(
+                new ArraySegment<byte>(Encoding.ASCII.GetBytes(getTableRowOptsJson, 0, getTableRowOptsJson.Length)),
+                WebSocketMessageType.Text, true, CancellationToken.None);
         }
 
         /// <summary>
-        /// method for sending a get_transaction_lifecycle-request.
+        ///     method for sending a get_transaction_lifecycle-request.
         /// </summary>
         /// <param name="getTransactionLifecycleOpts">
-        /// Options for sending a get_transaction_lifecycle-request.
+        ///     Options for sending a get_transaction_lifecycle-request.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
-        public async Task GetTransactionLifecycle(DfuseWebSocketRequest<GetTransactionLifecycleOptions> getTransactionLifecycleOpts)
+        public async Task GetTransactionLifecycle(
+            DfuseWebSocketRequest<GetTransactionLifecycleOptions> getTransactionLifecycleOpts)
         {
-            string getTransactionLifecycleOptsJson = JsonConvert.SerializeObject(getTransactionLifecycleOpts);
-            await clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.ASCII.GetBytes(getTransactionLifecycleOptsJson, 0, getTransactionLifecycleOptsJson.Length)), WebSocketMessageType.Text, true, CancellationToken.None);
+            var getTransactionLifecycleOptsJson = JsonConvert.SerializeObject(getTransactionLifecycleOpts);
+            await _clientWebSocket.SendAsync(
+                new ArraySegment<byte>(Encoding.ASCII.GetBytes(getTransactionLifecycleOptsJson, 0,
+                    getTransactionLifecycleOptsJson.Length)), WebSocketMessageType.Text, true, CancellationToken.None);
         }
 
         /// <summary>
-        /// method for sending a get_head_info-request.
+        ///     method for sending a get_head_info-request.
         /// </summary>
         /// <param name="getHeadInfoOpts">
-        /// Options for sending a get_head_info-request.
+        ///     Options for sending a get_head_info-request.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
         public async Task GetHeadInfo(DfuseWebSocketRequest<GetHeadInfoOptions> getHeadInfoOpts)
         {
-            string getHeadInfoOptsJson = JsonConvert.SerializeObject(getHeadInfoOpts);
-            await clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.ASCII.GetBytes(getHeadInfoOptsJson, 0, getHeadInfoOptsJson.Length)), WebSocketMessageType.Text, true, CancellationToken.None);
+            var getHeadInfoOptsJson = JsonConvert.SerializeObject(getHeadInfoOpts);
+            await _clientWebSocket.SendAsync(
+                new ArraySegment<byte>(Encoding.ASCII.GetBytes(getHeadInfoOptsJson, 0, getHeadInfoOptsJson.Length)),
+                WebSocketMessageType.Text, true, CancellationToken.None);
         }
 
         /// <summary>
-        /// method for sending a unlisten-request.
+        ///     method for sending a unlisten-request.
         /// </summary>
         /// <param name="unlistenOpts">
-        /// Options for sending a unlisten-request.
+        ///     Options for sending a unlisten-request.
         /// </param>
         /// <returns>
-        /// The <see cref="Task"/>.
+        ///     The <see cref="Task" />.
         /// </returns>
         public async Task Unlisten(DfuseWebSocketRequest<UnlistenOptions> unlistenOpts)
         {
-            string getTransactionLifecycleOptsJson = JsonConvert.SerializeObject(unlistenOpts);
-            await clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.ASCII.GetBytes(getTransactionLifecycleOptsJson, 0, getTransactionLifecycleOptsJson.Length)), WebSocketMessageType.Text, true, CancellationToken.None);
+            var getTransactionLifecycleOptsJson = JsonConvert.SerializeObject(unlistenOpts);
+            await _clientWebSocket.SendAsync(
+                new ArraySegment<byte>(Encoding.ASCII.GetBytes(getTransactionLifecycleOptsJson, 0,
+                    getTransactionLifecycleOptsJson.Length)), WebSocketMessageType.Text, true, CancellationToken.None);
         }
 
         /// <summary>
-        /// Invokes MessageReceived-Event.
+        ///     Invokes MessageReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<IDfuseResponseData>.
+        /// <param name="e" IDfuseResponseData=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnMessageReceived(DfuseMessageReceivedEventArgs<IDfuseResponseData> e)
         {
@@ -259,10 +318,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes ActionTracesReceived-Event.
+        ///     Invokes ActionTracesReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<ActionTrace>.
+        /// <param name="e" ActionTrace=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnActionTracesReceived(DfuseMessageReceivedEventArgs<ActionTrace> e)
         {
@@ -270,10 +329,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes TableRowsReceived-Event.
+        ///     Invokes TableRowsReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<TableRows>.
+        /// <param name="e" TableRows=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnTableRowsReceived(DfuseMessageReceivedEventArgs<TableRows> e)
         {
@@ -281,10 +340,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes TableDeltaReceived-Event.
+        ///     Invokes TableDeltaReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<TableDelta>.
+        /// <param name="e" TableDelta=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnTableDeltaReceived(DfuseMessageReceivedEventArgs<TableDelta> e)
         {
@@ -292,10 +351,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes TransactionLifecycleReceived-Event.
+        ///     Invokes TransactionLifecycleReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<TransactionLifecycle>.
+        /// <param name="e" TransactionLifecycle=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnTransactionLifecycleReceived(DfuseMessageReceivedEventArgs<TransactionLifecycle> e)
         {
@@ -303,10 +362,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes HeadInfoReceived-Event.
+        ///     Invokes HeadInfoReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<HeadInfo>.
+        /// <param name="e" HeadInfo=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnHeadInfoReceived(DfuseMessageReceivedEventArgs<HeadInfo> e)
         {
@@ -314,10 +373,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes ProgressReceived-Event.
+        ///     Invokes ProgressReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<Progress>.
+        /// <param name="e" Progress=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnProgressReceived(DfuseMessageReceivedEventArgs<Progress> e)
         {
@@ -325,10 +384,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes PingReceived-Event.
+        ///     Invokes PingReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<Ping>.
+        /// <param name="e" Ping=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnPingReceived(DfuseMessageReceivedEventArgs<Ping> e)
         {
@@ -336,10 +395,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes ErrorReceived-Event.
+        ///     Invokes ErrorReceived-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<Error>.
+        /// <param name="e" Error=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnErrorReceived(DfuseMessageReceivedEventArgs<Error> e)
         {
@@ -347,10 +406,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes Listening-Event.
+        ///     Invokes Listening-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<Listening>.
+        /// <param name="e" Listening=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnListening(DfuseMessageReceivedEventArgs<Listening> e)
         {
@@ -358,10 +417,10 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// Invokes Unlistened-Event.
+        ///     Invokes Unlistened-Event.
         /// </summary>
-        /// <param name="e">
-        /// DfuseMessageReceivedEventArgs<Unlistened>.
+        /// <param name="e" Unlistened=".">
+        ///     DfuseMessageReceivedEventArgs
         /// </param>
         protected virtual void OnUnlistened(DfuseMessageReceivedEventArgs<Unlistened> e)
         {
@@ -369,74 +428,97 @@ namespace EosWsSharp
         }
 
         /// <summary>
-        /// MessageReceived-Event
+        ///     MessageReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<IDfuseResponseData>> MessageReceived;
 
         /// <summary>
-        /// ActionTracesReceived-Event
+        ///     ActionTracesReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<ActionTrace>> ActionTracesReceived;
 
         /// <summary>
-        /// TableRowsReceived-Event
+        ///     TableRowsReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<TableRows>> TableRowsReceived;
 
         /// <summary>
-        /// TableDeltaReceived-Event
+        ///     TableDeltaReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<TableDelta>> TableDeltaReceived;
 
         /// <summary>
-        /// TransactionLifecycleReceived-Event
+        ///     TransactionLifecycleReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<TransactionLifecycle>> TransactionLifecycleReceived;
 
         /// <summary>
-        /// HeadInfoReceived-Event
+        ///     HeadInfoReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<HeadInfo>> HeadInfoReceived;
 
         /// <summary>
-        /// ProgressReceived-Event
+        ///     ProgressReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<Progress>> ProgressReceived;
 
         /// <summary>
-        /// ErrorReceived-Event
+        ///     ErrorReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<Error>> ErrorReceived;
 
         /// <summary>
-        /// PingReceived-Event
+        ///     PingReceived-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<Ping>> PingReceived;
 
         /// <summary>
-        /// Listening-Event
+        ///     Listening-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<Listening>> Listening;
 
         /// <summary>
-        /// Unlistened-Event
+        ///     Unlistened-Event
         /// </summary>
         public event EventHandler<DfuseMessageReceivedEventArgs<Unlistened>> Unlistened;
 
+        /// <summary>
+        ///     Invokes ConnectionLost-Event.
+        /// </summary>
+        /// <param name="e">
+        ///     DfuseWebSocketClosedEventArgs
+        /// </param>
+        protected virtual void OnConnectionLost(DfuseWebSocketClosedEventArgs e)
+        {
+            ConnectionLost?.Invoke(this, e);
+        }
+
+        /// <summary>
+        ///     ConnectionLost-Event, when connection lost
+        /// </summary>
+        public event EventHandler<DfuseWebSocketClosedEventArgs> ConnectionLost;
     }
 
     /// <summary>
-    /// dfuse messageReceivedEventArgs of generic type IDfuseResponseData.
+    ///     dfuse messageReceivedEventArgs of generic type IDfuseResponseData.
+    /// </summary>
+    public class DfuseWebSocketClosedEventArgs
+    {
+        public WebSocketState State;
+    }
+
+    /// <summary>
+    ///     dfuse messageReceivedEventArgs of generic type IDfuseResponseData.
     /// </summary>
     /// <typeparam name="T">
     /// </typeparam>
     public class DfuseMessageReceivedEventArgs<T> where T : IDfuseResponseData
     {
-        public DfuseWebSocketResponse<T> response;
+        public DfuseWebSocketResponse<T> Response;
     }
 
     /// <summary>
-    /// Eos-network-enumerable.
+    ///     Eos-network-enumerable.
     /// </summary>
     public enum Network
     {
