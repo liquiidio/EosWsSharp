@@ -58,6 +58,32 @@ namespace EosWsSharp
         }
 
         /// <summary>
+        ///     Initializes a new instance of the <see cref="DfuseClient" /> class.
+        /// </summary>
+        /// <param name="eosNetwork">
+        ///     The eos network.
+        /// </param>
+        /// <param name="bearer">
+        ///     The bearer-token passed as authorization.
+        /// </param>
+        /// <param name="origin">
+        ///     The origin passed to the header.
+        /// </param>
+        /// <param name="uri">
+        ///     dfuse-Endpoint Uri
+        /// </param>
+        public DfuseClient(Network eosNetwork, string bearer, string origin, string uri)
+        {
+            _bearer = bearer;
+            _origin = origin;
+            _wsUri = new Uri(uri);
+
+            _clientWebSocket = new ClientWebSocket();
+            _clientWebSocket.Options.SetRequestHeader("Origin", origin);
+            _clientWebSocket.Options.SetRequestHeader("Authorization", "Bearer " + bearer);
+        }
+
+        /// <summary>
         ///     The WebSocketState of the underlying ClientWebSocket.
         /// </summary>
         public WebSocketState ConnectionState => _clientWebSocket.State;
@@ -88,24 +114,21 @@ namespace EosWsSharp
             while (_clientWebSocket.State == WebSocketState.Open)
                 try
                 {
-                    var receivedBytes = new ArraySegment<byte>(new byte[131072]);
+                    var receivedBytes = new ArraySegment<byte>(new byte[1024]);
 
                     var result = await _clientWebSocket.ReceiveAsync(receivedBytes, ctl);
-                    var response = Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
-
+                    var jsonResponse = Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
                     while (!result.EndOfMessage)
                     {
                         result = await _clientWebSocket.ReceiveAsync(receivedBytes, ctl);
-                        response += Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
+                        jsonResponse += Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
                     }
-
-                    HandleResponse(response);
+                    HandleResponse(jsonResponse);
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e);
+                    OnException(new DfuseExceptionEventArgs() { Exception = e });
                 }
-
             OnConnectionLost(new DfuseWebSocketClosedEventArgs {State = _clientWebSocket.State});
         }
 
@@ -197,7 +220,7 @@ namespace EosWsSharp
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                OnException(new DfuseExceptionEventArgs(){Exception = e});
             }
         }
 
@@ -493,10 +516,28 @@ namespace EosWsSharp
             ConnectionLost?.Invoke(this, e);
         }
 
+
         /// <summary>
         ///     ConnectionLost-Event, when connection lost
         /// </summary>
         public event EventHandler<DfuseWebSocketClosedEventArgs> ConnectionLost;
+
+
+        /// <summary>
+        ///     Invokes Exeption-Event.
+        /// </summary>
+        /// <param name="e">
+        ///     DfuseWebSocketClosedEventArgs
+        /// </param>
+        protected virtual void OnException(DfuseExceptionEventArgs e)
+        {
+            Exception?.Invoke(this, e);
+        }
+
+        /// <summary>
+        ///     Exception-Event, when exception is thrown
+        /// </summary>
+        public event EventHandler<DfuseExceptionEventArgs> Exception;
     }
 
     /// <summary>
@@ -505,6 +546,14 @@ namespace EosWsSharp
     public class DfuseWebSocketClosedEventArgs
     {
         public WebSocketState State;
+    }
+
+    /// <summary>
+    ///     dfuse exceptionEventArgs of generic type IDfuseResponseData.
+    /// </summary>
+    public class DfuseExceptionEventArgs
+    {
+        public Exception Exception;
     }
 
     /// <summary>
