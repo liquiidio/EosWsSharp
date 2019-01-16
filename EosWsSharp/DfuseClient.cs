@@ -34,6 +34,8 @@ namespace EosWsSharp
         /// </summary>
         private readonly ClientWebSocket _clientWebSocket;
 
+        public int MaxBufferSize = 0;
+
         /// <summary>
         ///     Initializes a new instance of the <see cref="DfuseClient" /> class.
         /// </summary>
@@ -46,7 +48,8 @@ namespace EosWsSharp
         /// <param name="origin">
         ///     The origin passed to the header.
         /// </param>
-        public DfuseClient(Network eosNetwork, string bearer, string origin)
+        /// <param name="buffersize"></param>
+        public DfuseClient(Network eosNetwork, string bearer, string origin, int buffersize = 4096)
         {
             _bearer = bearer;
             _origin = origin;
@@ -55,6 +58,7 @@ namespace EosWsSharp
             _clientWebSocket = new ClientWebSocket();
             _clientWebSocket.Options.SetRequestHeader("Origin", origin);
             _clientWebSocket.Options.SetRequestHeader("Authorization", "Bearer " + bearer);
+            _clientWebSocket.Options.SetBuffer(buffersize,4096);
         }
 
         /// <summary>
@@ -114,20 +118,26 @@ namespace EosWsSharp
             while (_clientWebSocket.State == WebSocketState.Open)
                 try
                 {
+                    int bufferSize = 0;
                     var receivedBytes = new ArraySegment<byte>(new byte[1024]);
 
-                    var result = await _clientWebSocket.ReceiveAsync(receivedBytes, ctl);
-                    var jsonResponse = Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
-                    while (!result.EndOfMessage)
+                    WebSocketReceiveResult result;
+                    string jsonResponse = null;
+                    do
                     {
                         result = await _clientWebSocket.ReceiveAsync(receivedBytes, ctl);
                         jsonResponse += Encoding.UTF8.GetString(receivedBytes.Array, 0, result.Count);
+                        bufferSize += result.Count;
                     }
+                    while (!result.EndOfMessage);
+
+                    if (MaxBufferSize < bufferSize)
+                        MaxBufferSize = bufferSize;
                     HandleResponse(jsonResponse);
                 }
                 catch (Exception e)
                 {
-                    OnException(new DfuseExceptionEventArgs() { Exception = e });
+                   OnException(new DfuseExceptionEventArgs() { Exception = e });
                 }
             OnConnectionLost(new DfuseWebSocketClosedEventArgs {State = _clientWebSocket.State});
         }
